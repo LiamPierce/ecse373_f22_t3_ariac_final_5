@@ -1,4 +1,6 @@
 #include <map>
+#include <sstream>
+
 
 #include "ros/ros.h"
 #include "std_srvs/Trigger.h"
@@ -9,15 +11,18 @@
 #include "osrf_gear/GetMaterialLocations.h"
 #include "osrf_gear/LogicalCameraImage.h"
 
+#include "geometry_msgs/Pose.h"
+
 using namespace std;
 
 
 std::vector<osrf_gear::Order> orderQueue;
 
 ros::ServiceClient materialLocationsService;
-std::map<std::string, ros::Subscriber> logicCameras;
+std::map<string, ros::Subscriber> logicCameraSubscribers;
+std::map<string, osrf_gear::LogicalCameraImage> logicalCameraImages;
 
-std::string * getBin(osrf_gear::Product p){
+string * getBin(osrf_gear::Product p){
   osrf_gear::GetMaterialLocations c;
   c.request.material_type = p.type.c_str();
   materialLocationsService.call(c);
@@ -27,7 +32,9 @@ std::string * getBin(osrf_gear::Product p){
     return NULL;
   }
 
-  return &c.response.storage_units[0].unit_id;
+  static string bin = (string) c.response.storage_units[0].unit_id;
+
+  return &bin;
 }
 
 void orderHandler(const osrf_gear::Order& o){
@@ -41,16 +48,34 @@ void orderHandler(const osrf_gear::Order& o){
     for (osrf_gear::Product p : s.products){
       ROS_INFO("\t\tPRODUCT: %s", p.type.c_str());
 
-      std::string* binId = getBin(p);
+      string *binId = getBin(p);
       if (binId){
-        ROS_INFO_STREAM(binId);
+        ROS_INFO_STREAM("\t\tBIN: "<<*binId);
+      }
+
+      osrf_gear::LogicalCameraImage im = logicalCameraImages["logical_camera_"+(*binId)];
+
+      ROS_INFO_STREAM(im.models.size());
+
+      if (im.models.size() > 0){
+        ROS_INFO("\t\tPose: XYZ [%f %f %f] QTRN [%f %f %f %f]",
+          im.models[0].pose.position.x,
+          im.models[0].pose.position.y,
+          im.models[0].pose.position.z,
+          im.models[0].pose.orientation.x,
+          im.models[0].pose.orientation.y,
+          im.models[0].pose.orientation.z,
+          im.models[0].pose.orientation.w
+        );
+      }else{
+        ROS_ERROR("\t\tProduct not found in bin.");
       }
     }
   }
 }
 
-void logicalCameraHandler(const osrf_gear::LogicalCameraImage&, std::string* bin){
-
+void logicalCameraHandler(const osrf_gear::LogicalCameraImage::ConstPtr &im, const string &topic){
+  logicalCameraImages.insert(pair<string, osrf_gear::LogicalCameraImage>(topic, *im));
 }
 
 int main(int argc, char **argv){
@@ -73,25 +98,24 @@ int main(int argc, char **argv){
 
   materialLocationsService = n.serviceClient<osrf_gear::GetMaterialLocations>("material_locations");
 
-  for (int i = 1;i<=6;i++){
-    std::string topic = "logical_camera_bin"+std::to_string(i);
+  //Subscribe to all 10 logic cameras and monitor them by topic.
+  string prefix = "logical_camera_bin";
+  int dec = 0;
+  for (int i = 1;i<=10;i++){
+    string topic = prefix+std::to_string(i-dec);
 
-    logicCameras.insert(pair<std::string, ros::Subscriber>(
+    ros::Subscriber subscriber = n.subscribe<osrf_gear::LogicalCameraImage>(
       topic,
-      n.subscribe<osrf_gear::LogicalCameraImage>(
-        topic,
-        10,
-        boost::bind(logicalCameraHandler, _1)
-      )
-    ));
-  }
+      10,
+      boost::bind(logicalCameraHandler, _1, topic)
+    );
 
-  for (int i = 1;i<=2;i++){
-    //logicCameras.insert(pair<std::string, ros::Subscriber>("agv"+std::to_string(i), n.subscribe("logical_camera_agv"+std::to_string(i), 10, handleLogicCameras)));
-  }
+    logicCameraSubscribers.insert(pair<string, ros::Subscriber>(topic, subscriber));
 
-  for (int i = 1;i<=2;i++){
-    //logicCameras.insert(pair<std::string, ros::Subscriber>("qc"+std::to_string(i), n.subscribe("quality_control_sensor_"+std::to_string(i), 10, handleLogicCameras)));
+    if (i == 6 || i == 8){
+      dec=i;
+      prefix = i == 6 ? "logical_camera_agv" : "quality_control_sensor_";
+    }
   }
 
   ros::Subscriber orders = n.subscribe("orders", 1000, orderHandler);
