@@ -23,12 +23,12 @@ ros::ServiceClient materialLocationsService;
 std::map<string, ros::Subscriber> logicCameraSubscribers;
 std::map<string, osrf_gear::LogicalCameraImage> logicalCameraImages;
 
-string * getBin(osrf_gear::Product p){
+string getBin(osrf_gear::Product p){
 
   if (binCache.find(p.type) != binCache.end()){
-    return &binCache[p.type];
+    return binCache[p.type];
   }
-  ROS_INFO_STREAM(logicalCameraImages.size());
+
   for (int i = 1; i<=6;i++){
     osrf_gear::LogicalCameraImage im = logicalCameraImages["logical_camera_bin"+i];
 
@@ -38,33 +38,33 @@ string * getBin(osrf_gear::Product p){
 
     if (im.models[0].type == p.type){
       binCache[p.type] = "bin"+i;
-      return &binCache[p.type];
+      return binCache[p.type];
     }
   }
 
-  return NULL;
+  return "nobin";
 }
 
-string * getBinCheat(osrf_gear::Product p){
+string getBinCheat(osrf_gear::Product& p){
   osrf_gear::GetMaterialLocations c;
-  c.request.material_type = p.type.c_str();
-  materialLocationsService.call(c);
+  c.request.material_type = (string) p.type;
+  if (!materialLocationsService.call(c)){
+    ROS_ERROR("Failed to call material locations service.");
+    return "nobin";
+  }
 
   if (!c.response.storage_units.size()){
     ROS_INFO("\t\tNOT FOUND IN ANY BIN!");
-    return NULL;
+    return "nobin";
   }
-
-  ROS_INFO_STREAM(c.response.storage_units.size());
 
   for (osrf_gear::StorageUnit unit : c.response.storage_units){
     if ((string) unit.unit_id != "belt"){
-      static string bin = (string) unit.unit_id;
-      return &bin;
+      return (string) unit.unit_id;
     }
   }
 
-  return NULL;
+  return "nobin";
 }
 
 void orderHandler(const osrf_gear::Order& o){
@@ -86,7 +86,9 @@ int main(int argc, char **argv){
   ros::ServiceClient beginClient = n.serviceClient<std_srvs::Trigger>("start_competition");
 
   ROS_INFO("Sending begin client call.");
-  beginClient.call(beginComp);
+  if (!beginClient.call(beginComp)){
+    ROS_ERROR("FAILED TO CALL COMPETITION SERVICE!");
+  }
 
   if (!beginComp.response.success){
     ROS_WARN("Competition service returned failure: %s", beginComp.response.message.c_str());
@@ -145,18 +147,16 @@ int main(int argc, char **argv){
         for (osrf_gear::Product p : s.products){
           ROS_INFO("\t\tPRODUCT: %s", p.type.c_str());
 
-          string *binId = getBin(p);
-          if (binId){
-            ROS_INFO_STREAM("\t\tBIN: "<<*binId);
-          }
+          string binId = getBinCheat(p);
+          ROS_INFO_STREAM("\t\tBIN: "<<binId);
 
-          ROS_INFO_STREAM("\t\tLooking at logical_camera_"+(*binId));
-          if (logicalCameraImages.find("logical_camera_"+(*binId)) == logicalCameraImages.end()){
+          ROS_INFO_STREAM("\t\tLooking at logical_camera_"+(binId));
+          if (logicalCameraImages.find("logical_camera_"+(binId)) == logicalCameraImages.end()){
             ROS_INFO("NO DATA ON THIS BIN");
             continue;
           }
 
-          osrf_gear::LogicalCameraImage im = logicalCameraImages["logical_camera_"+(*binId)];
+          osrf_gear::LogicalCameraImage im = logicalCameraImages["logical_camera_"+(binId)];
 
           if (im.models.size() == 0){
             ROS_ERROR("\t\tProduct not found in bin.");
