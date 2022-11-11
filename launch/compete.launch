@@ -1,3 +1,3 @@
 <launch>
-  <node name="r1" pkg="final_project_5" ns="ariac" type="compete" output="screen" />
+  <include file="$(find ecse_373_ariac)/launch/ecse_373_ariac.launch" />
 </launch>

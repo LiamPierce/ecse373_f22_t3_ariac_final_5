@@ -20,6 +20,9 @@
 
 #include "ur_kinematics/ur_kin.h"
 
+#include "actionlib/client/simple_action_client.h"
+#include "actionlib/client/terminal_state.h"
+
 using namespace std;
 
 std::vector<osrf_gear::Order> orderQueue;
@@ -165,12 +168,17 @@ void moveArm(geometry_msgs::PoseStamped &desired){
   // How long to take for the movement.
   jointTrajectory.points[1].time_from_start = ros::Duration(1.0);
 
-  armPositionPublisher.publish(jointTrajectory);
+  actionlib::SimpleActionClient<control_msgs::FollowJointTrajectoryAction> trajectory_as("ariac/arm/follow_joint_trajectory", true);
+
+  control_msgs::FollowJointTrajectoryAction joint_trajectory_as;
+  joint_trajectory_as.action_goal.goal.trajectory = jointTrajectory;
+  actionlib::SimpleClientGoalState state = trajectory_as.sendGoalAndWait(joint_trajectory_as.action_goal.goal, ros::Duration(30.0), ros::Duration(30.0));
+  ROS_INFO("Action Server returned with status: [%i] %s", state.state_, state.toString().c_str());
 }
 
 int main(int argc, char **argv){
 
-  ros::init(argc, argv, "final_project_5");
+  ros::init(argc, argv, "cwru_ecse_373_submission");
   ros::NodeHandle n;
 
   std_srvs::Trigger beginComp;
@@ -217,6 +225,7 @@ int main(int argc, char **argv){
   ros::Subscriber jointStateSubsriber = n.subscribe("arm1/joint_states", 1, jointStateListener);
 
   armPositionPublisher = n.advertise<trajectory_msgs::JointTrajectory>("arm/command", 10);
+
   ros::Rate loop_rate(10);
 
   int count = 0;

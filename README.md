@@ -15,10 +15,11 @@ The code also contains a method for finding (and caching) the correct bin locati
 ## Launch the competition environment:
 
 ```
-roslaunch final_project_5 competition.launch
+roslaunch cwru_ecse_373_submission compete.launch
 ```
 
 ## Launch the code that attempts the competition:
+
 ```
-roslaunch final_project_5 compete.launch
+roslaunch cwru_ecse_373_submission competition.launch
 ```

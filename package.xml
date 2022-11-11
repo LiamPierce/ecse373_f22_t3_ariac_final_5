@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>final_project_5</name>
+  <name>cwru_ecse_373_submission</name>
   <version>0.0.0</version>
-  <description>The final_project_5 package</description>
+  <description>The cwru_ecse_373_submission package</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag -->
   <!-- Example:  -->
@@ -19,7 +19,7 @@
   <!-- Url tags are optional, but multiple are allowed, one per tag -->
   <!-- Optional attribute type can be: website, bugtracker, or repository -->
   <!-- Example: -->
-  <!-- <url type="website">http://wiki.ros.org/final_project_5</url> -->
+  <!-- <url type="website">http://wiki.ros.org/cwru_ecse_373_submission</url> -->
 
 
   <!-- Author tags are optional, multiple are allowed, one per tag -->
@@ -52,9 +52,12 @@
   <build_depend>ecse_373_ariac</build_depend>
   <build_depend>roscpp</build_depend>
   <build_depend>rviz</build_depend>
+  <build_depend>actionlib</build_depend>
+  <build_depend>actionlib_msg</build_depend>
   <build_export_depend>ecse_373_ariac</build_export_depend>
   <build_export_depend>roscpp</build_export_depend>
   <build_export_depend>rviz</build_export_depend>
+  <build_export_depend>actionlib</build_export_depend>
   <exec_depend>ecse_373_ariac</exec_depend>
   <exec_depend>roscpp</exec_depend>
   <exec_depend>rviz</exec_depend>
