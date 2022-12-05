@@ -11,9 +11,17 @@ find_package(catkin REQUIRED COMPONENTS
   ecse_373_ariac
   roscpp
   rviz
+  tf
+  tf2
   tf2_ros
   tf2_geometry_msgs
   actionlib
+  osrf_gear
+  ur_kinematics
+  sensor_msgs
+  std_msgs
+  std_srvs
+  trajectory_msgs
 )
 
 ## System dependencies are found with CMake's conventions
@@ -139,7 +147,7 @@ include_directories(
 # add_executable(${PROJECT_NAME}_node src/cwru_ecse_373_submission_node.cpp)
 
 add_executable(compete src/comp.cpp)
-target_link_libraries(compete ${catkin_LIBRARIES})
+#target_link_libraries(compete ${catkin_LIBRARIES})
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -152,9 +160,10 @@ target_link_libraries(compete ${catkin_LIBRARIES})
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-# target_link_libraries(${PROJECT_NAME}_node
-#   ${catkin_LIBRARIES}
-# )
+target_link_libraries(compete
+   ${catkin_LIBRARIES}
+   ur10_kin
+)
 
 #############
 ## Install ##
