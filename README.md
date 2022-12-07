@@ -23,3 +23,24 @@ roslaunch cwru_ecse_373_submission compete.launch
 ```
 roslaunch cwru_ecse_373_submission competition.launch
 ```
+
+# Potential Build Issues
+
+If building gives you an error like the following:
+
+```
+
+
+[ 50%] Linking CXX executable /ariac_ws/devel/lib/cwru_ecse_373_submission/compete
+/usr/bin/ld: cannot find -lur10_kin
+collect2: error: ld returned 1 exit status
+make[2]: *** [final_project/CMakeFiles/compete.dir/build.make:191: /ariac_ws/devel/lib/cwru_ecse_373_submission/compete] Error 1
+make[1]: *** [CMakeFiles/Makefile2:511: final_project/CMakeFiles/compete.dir/all] Error 2
+make: *** [Makefile:141: all] Error 2
+Invoking "make -j7 -l7" failed
+```
+
+Run:
+```
+LIBRARY_PATH="$LD_LIBRARY_PATH"
+```
