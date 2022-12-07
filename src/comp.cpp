@@ -33,7 +33,7 @@ std::map<string, string> binCache;
 ros::ServiceClient materialLocationsService;
 std::map<string, ros::Subscriber> logicCameraSubscribers;
 std::map<string, osrf_gear::LogicalCameraImage> logicalCameraImages;
-std::map<string, double> binPositions = {{"bin1", 0}, {"bin2", 0}, {"bin3", 0}, {"bin4", -0.6}, {"bin5", 0.33}, {"bin6", 1.1}};
+std::map<string, double> binPositions = {{"bin1", 0}, {"bin2", 0}, {"bin3", 0}, {"bin4", -0.4}, {"bin5", 0.35}, {"bin6", 1.2}};
 
 sensor_msgs::JointState jointStates;
 
@@ -141,6 +141,8 @@ void moveArm(geometry_msgs::Pose &desired){
 
   ur_kinematics::forward((double *)&current_pose, (double *)&T_forward);
 
+  ROS_INFO("%f %f %f", desired.position.x, desired.position.y, desired.position.z);
+
   T_forward[0][3] = desired.position.x;
   T_forward[1][3] = desired.position.y;
   T_forward[2][3] = desired.position.z;
@@ -208,12 +210,10 @@ void moveArm(geometry_msgs::Pose &desired){
   jointTrajectory.points[0].time_from_start = ros::Duration(0.0);
   jointTrajectory.points[1].time_from_start = ros::Duration(2.0);
 
-  int solution_index = 0;
-
   jointTrajectory.points[1].positions[0] = jointStates.position[1];
 
   for (int indy = 0; indy < 6; indy++) {
-    jointTrajectory.points[1].positions[indy + 1] = output_poses[solution_index][indy];
+    jointTrajectory.points[1].positions[indy + 1] = output_poses[0][indy];
   }
 
   armPositionPublisher.publish(jointTrajectory);
@@ -224,6 +224,10 @@ void moveArm(geometry_msgs::Pose &desired){
     ros::Duration(0.1).sleep();
   }*/
 
+}
+
+bool baseIsMoving() {
+  return std::abs(jointStates.velocity[1]) > 0.1;
 }
 
 void moveBase(double to, bool absolute = false){
@@ -267,9 +271,14 @@ void moveBase(double to, bool absolute = false){
   jointTrajectory.points[1].positions[0] = (!absolute ? jointStates.position[1] : 0) + to;
 
   armPositionPublisher.publish(jointTrajectory);
-  ROS_INFO("Published new joint trajectory.");
+  ROS_INFO("Published new joint trajectory for base.");
 
-  ros::Duration(5.0).sleep();
+  ros::Duration(3.0).sleep();
+  while (baseIsMoving()){
+    ros::Duration(0.1).sleep();
+  }
+
+  ROS_INFO("Done moving base.");
 }
 
 int main(int argc, char **argv){
@@ -384,6 +393,8 @@ int main(int argc, char **argv){
             continue;
           }
 
+          moveBase(binPositions[binId], true);
+
           geometry_msgs::TransformStamped tf;
           try{
             tf = tfBuffer.lookupTransform("arm1_base_link", "logical_camera_"+binId+"_frame", ros::Time(0.0), ros::Duration(1.0));
@@ -406,7 +417,6 @@ int main(int argc, char **argv){
           goalPose.pose.orientation.y = 0.707;
           goalPose.pose.orientation.z = 0.0;
 
-          moveBase(binPositions[binId]);
           moveArm(goalPose.pose);
 
           ros::Duration(1).sleep();
@@ -429,6 +439,9 @@ int main(int argc, char **argv){
           if (!success){
             ROS_ERROR("GRIPPER FAILED TO DISABLE");
           }
+
+          moveArm(startPose);
+          ros::Duration(1).sleep();
         }
       }
       ROS_INFO("Moving arm to home.");
