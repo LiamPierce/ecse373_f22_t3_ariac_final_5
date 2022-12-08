@@ -33,7 +33,7 @@ std::map<string, string> binCache;
 ros::ServiceClient materialLocationsService;
 std::map<string, ros::Subscriber> logicCameraSubscribers;
 std::map<string, osrf_gear::LogicalCameraImage> logicalCameraImages;
-std::map<string, double> binPositions = {{"bin1", 0}, {"bin2", 0}, {"bin3", 0}, {"bin4", -0.4}, {"bin5", 0.35}, {"bin6", 1.2}};
+std::map<string, double> binPositions = {{"bin1", 0}, {"bin2", 0}, {"bin3", 0}, {"bin4", 0.419599}, {"bin5", 0.35}, {"bin6", 1.2}};
 //std::map<string, double> binPositions = {{"bin1", 0}, {"bin2", 0}, {"bin3", 0}, {"bin4", -0.4}, {"bin5", 0.35}, {"bin6", 1.2}};
 
 sensor_msgs::JointState jointStates;
@@ -411,6 +411,8 @@ int main(int argc, char **argv){
             continue;
           }
 
+          binId = "bin4";
+
           moveBase(binPositions[binId], true);
 
           geometry_msgs::Pose partPose, goalPose;
@@ -433,8 +435,8 @@ int main(int argc, char **argv){
           ROS_INFO("ARM Frame Pose: ");
           printPose(goalPose);
 
-          /*goalPose.pose.position.x += 0.415;
-          goalPose.pose.position.y -= 0.378;*/
+          goalPose.position.x += 0.415;
+          //goalPose.pose.position.y -= 0.378;
           goalPose.position.z += 0.24;
           goalPose.orientation.w = 0.707;
           goalPose.orientation.x = 0.0;
