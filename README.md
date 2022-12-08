@@ -42,5 +42,6 @@ Invoking "make -j7 -l7" failed
 
 Run:
 ```
+export LIBRARY_PATH
 LIBRARY_PATH="$LD_LIBRARY_PATH"
 ```
