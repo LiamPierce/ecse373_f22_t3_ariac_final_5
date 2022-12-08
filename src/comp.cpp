@@ -33,10 +33,12 @@ std::map<string, string> binCache;
 ros::ServiceClient materialLocationsService;
 std::map<string, ros::Subscriber> logicCameraSubscribers;
 std::map<string, osrf_gear::LogicalCameraImage> logicalCameraImages;
-std::map<string, double> binPositions = {{"bin1", 0}, {"bin2", 0}, {"bin3", 0}, {"bin4", 0.419599}, {"bin5", 0.35}, {"bin6", 1.2}};
+std::map<string, double> binPositions = {{"bin1", 0}, {"bin2", 0}, {"bin3", 0}, {"bin4", 0.493427}, {"bin5", 0.35}, {"bin6", 1.2}};
 //std::map<string, double> binPositions = {{"bin1", 0}, {"bin2", 0}, {"bin3", 0}, {"bin4", -0.4}, {"bin5", 0.35}, {"bin6", 1.2}};
 
-sensor_msgs::JointState jointStates;
+using ArmJointState = std::array<double, 7>;
+std::vector<std::string> order = {"linear_arm_actuator_joint", "shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"};
+ArmJointState jointState;
 
 ros::ServiceClient gripperClient;
 osrf_gear::VacuumGripperState gripperState;
@@ -106,8 +108,34 @@ void orderHandler(const osrf_gear::Order& o){
 }
 
 void jointStateListener(const sensor_msgs::JointState &js){
-  jointStates = js;
-  //ROS_INFO_STREAM_THROTTLE(10, jointStates);
+
+  ArmJointState newJointState;
+
+  for(int i = 0; i < 7; ++i){
+    for (int j = 0; j < js.name.size(); ++j){
+      if (order[i] == js.name[j]){
+        newJointState[i] = js.position[j];
+      }
+    }
+  }
+
+  jointState = newJointState;
+
+  {
+    std::stringstream ss;
+    ss << "[";
+    for (int i = 0; i < order.size(); ++i){
+      if (i != 0){
+        ss << ",";
+      }
+
+      ss << jointState[i];
+    }
+
+    ss << "]";
+
+    ROS_INFO_STREAM_THROTTLE(10.0, "Current joint state: " << ss.str());
+  }
 }
 
 void gripperStateListener(const osrf_gear::VacuumGripperStateConstPtr& msg) {
@@ -129,37 +157,13 @@ geometry_msgs::TransformStamped getArmTransformFrom(std::string bin){
   return tf;
 }
 
-bool armIsMoving() {
-  bool s = false;
-  for (const double v : jointStates.velocity) {
-    if (std::abs(v) > 0.1){
-      return true;
-    }
-  }
-
-  return false;
-}
-
 void printPose(const geometry_msgs::Pose &pose) {
   ROS_INFO("%f %f %f", pose.position.x, pose.position.y, pose.position.z);
 }
 
 int packets = 0;
+int actionServerPackets = 0;
 void moveArm(geometry_msgs::Pose &desired){
-
-  std::vector<std::string> order = {"shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"};
-
-  for(int i = 0; i < order.size(); ++i) {
-    current_pose[i] = 0.0;
-    for(int j = 0; j < jointStates.name.size(); ++j) {
-
-      if(order[i] == jointStates.name[j]) {
-        current_pose[i] = jointStates.position[j];
-      }
-    }
-  }
-
-  ur_kinematics::forward((double *)&current_pose, (double *)&T_forward);
 
   printPose(desired);
 
@@ -184,18 +188,42 @@ void moveArm(geometry_msgs::Pose &desired){
   T_forward[3][1] = 0.0;
   T_forward[3][2] = 0.0;
 
-  int num_sols = ur_kinematics::inverse((double *)&T_forward, (double *)&output_poses, 0.0);
+  int num_sols = ur_kinematics::inverse((double *)&T_forward, (double *)&output_poses);
 
   if (num_sols == 0) {
     ROS_ERROR("No inverse kinematics solutions found!");
     //ros::shutdown();
   }
 
-  for(int i = 0; i < num_sols; ++i) {
-    for(int j = 0; j < 6; ++j) {
-      std::cout << output_poses[i][j] << " ";
+  int sol_idx = 0;
+  for (int i = 0; i < num_sols; ++i) {
+    if (output_poses[i][3] > M_PI && output_poses[i][1] > M_PI && output_poses[i][2] < M_PI) {
+      sol_idx = i;
+      break;
     }
-    std::cout << std::endl;
+  }
+
+  ArmJointState goalJointState;
+  for (int i = 0; i < 6; ++i) {
+    goalJointState[i + 1] = output_poses[sol_idx][i];
+  }
+  goalJointState[0] = jointState[0]; //Keep linear actuator at the correct position.
+  goalJointState[6] = jointState[6]; //Keep end effector at the right rotation.
+
+  {
+    std::stringstream ss;
+    ss << "[";
+    for (int i = 0; i < order.size(); ++i){
+      if (i != 0){
+        ss << ",";
+      }
+
+      ss << goalJointState[i];
+    }
+
+    ss << "]";
+
+    ROS_INFO_STREAM("Goal joint state: " << ss.str());
   }
 
   trajectory_msgs::JointTrajectory jointTrajectory;
@@ -204,50 +232,57 @@ void moveArm(geometry_msgs::Pose &desired){
   jointTrajectory.header.stamp = ros::Time::now();
   jointTrajectory.header.frame_id = "/world";
 
-  // Set the names of the joints being used.  All must be present.
-  jointTrajectory.joint_names.clear();
-  jointTrajectory.joint_names.push_back("linear_arm_actuator_joint");
-  jointTrajectory.joint_names.push_back("shoulder_pan_joint");
-  jointTrajectory.joint_names.push_back("shoulder_lift_joint");
-  jointTrajectory.joint_names.push_back("elbow_joint");
-  jointTrajectory.joint_names.push_back("wrist_1_joint");
-  jointTrajectory.joint_names.push_back("wrist_2_joint");
-  jointTrajectory.joint_names.push_back("wrist_3_joint");
+  jointTrajectory.joint_names = order;
 
   jointTrajectory.points.resize(2);
-  jointTrajectory.points[0].positions.resize(jointTrajectory.joint_names.size());
-  jointTrajectory.points[1].positions.resize(jointTrajectory.joint_names.size());
 
-  for (int indy = 0; indy < jointTrajectory.joint_names.size(); indy++) {
-    for (int indz = 0; indz < jointStates.name.size(); indz++) {
-      if (jointTrajectory.joint_names[indy] == jointStates.name[indz]) {
-        jointTrajectory.points[0].positions[indy] = jointStates.position[indz];
-        break;
-      }
-    }
+  jointTrajectory.points[0].time_from_start = ros::Duration(0.1);
+  jointTrajectory.points[1].time_from_start = ros::Duration(2.1);
+
+  for (int i = 0; i < 7; ++i){
+    jointTrajectory.points[0].positions.push_back(jointState[i]);
+    jointTrajectory.points[1].positions.push_back(goalJointState[i]);
   }
 
-  jointTrajectory.points[0].time_from_start = ros::Duration(0.0);
-  jointTrajectory.points[1].time_from_start = ros::Duration(2.0);
+  {
+    std::stringstream ss;
+    ss << "[";
+    for (int i = 0; i < order.size(); ++i){
+      if (i != 0){
+        ss << ",";
+      }
 
-  jointTrajectory.points[1].positions[0] = jointStates.position[1];
+      ss << jointTrajectory.points[1].positions[i];
+    }
 
-  for (int indy = 0; indy < 6; indy++) {
-    jointTrajectory.points[1].positions[indy + 1] = output_poses[0][indy];
+    ss << "]";
+
+    ROS_INFO_STREAM("Trajectory joint output: " << ss.str());
   }
 
   armPositionPublisher.publish(jointTrajectory);
-  ROS_INFO("Published new joint trajectory.");
+  /*control_msgs::FollowJointTrajectoryAction jointTrajectoryPayload;
 
-  ros::Duration(2.0).sleep();
-  /*while (armIsMoving()){
-    ros::Duration(0.1).sleep();
+  jointTrajectoryPayload.action_goal.goal.trajectory = jointTrajectory;
+  jointTrajectoryPayload.action_goal.header.seq = actionServerPackets++;
+  jointTrajectoryPayload.action_goal.header.stamp = ros::Time::now();
+  jointTrajectoryPayload.action_goal.header.frame_id = "/world";
+
+  jointTrajectoryPayload.action_goal.goal_id.stamp = ros::Time::now();
+  jointTrajectoryPayload.action_goal.goal_id.id = std::to_string(actionServerPackets - 1);
+
+  actionlib::SimpleActionClient<control_msgs::FollowJointTrajectoryAction> trajectoryActionServer("arm1/arm/follow_joint_trajectory", true);
+  trajectoryActionServer.sendGoal(jointTrajectoryPayload.action_goal.goal);
+  trajectoryActionServer.waitForServer();
+  bool succeeded = trajectoryActionServer.waitForResult(ros::Duration(5.0));
+
+  if (succeeded){
+    actionlib::SimpleClientGoalState state = trajectoryActionServer.getState();
+    ROS_INFO("Trajectory finished with state %s with text: %s", state.toString().c_str(), state.getText().c_str());
+  }else{
+    ROS_ERROR("TRAJECTORY TIMEOUT!");
   }*/
-
-}
-
-bool baseIsMoving() {
-  return std::abs(jointStates.velocity[1]) > 0.1;
+  ros::Duration(2.0).sleep();
 }
 
 void moveBase(double to, bool absolute = false){
@@ -258,45 +293,25 @@ void moveBase(double to, bool absolute = false){
   jointTrajectory.header.stamp = ros::Time::now();
   jointTrajectory.header.frame_id = "/world";
 
-  // Set the names of the joints being used.  All must be present.
-  jointTrajectory.joint_names.clear();
-  jointTrajectory.joint_names.push_back("linear_arm_actuator_joint");
-  jointTrajectory.joint_names.push_back("shoulder_pan_joint");
-  jointTrajectory.joint_names.push_back("shoulder_lift_joint");
-  jointTrajectory.joint_names.push_back("elbow_joint");
-  jointTrajectory.joint_names.push_back("wrist_1_joint");
-  jointTrajectory.joint_names.push_back("wrist_2_joint");
-  jointTrajectory.joint_names.push_back("wrist_3_joint");
+  jointTrajectory.joint_names = order;
 
   jointTrajectory.points.resize(2);
   jointTrajectory.points[0].positions.resize(jointTrajectory.joint_names.size());
   jointTrajectory.points[1].positions.resize(jointTrajectory.joint_names.size());
 
-  for (int indy = 0; indy < jointTrajectory.joint_names.size(); indy++) {
-    for (int indz = 0; indz < jointStates.name.size(); indz++) {
-      if (jointTrajectory.joint_names[indy] == jointStates.name[indz]) {
-        jointTrajectory.points[0].positions[indy] = jointStates.position[indz];
-        break;
-      }
-    }
-  }
-
   jointTrajectory.points[0].time_from_start = ros::Duration(0.0);
   jointTrajectory.points[1].time_from_start = ros::Duration(2.0);
 
-  for (int indy = 1; indy < 7; indy++) {
-    jointTrajectory.points[1].positions[indy] = jointTrajectory.points[0].positions[indy];
+  for (int indy = 0; indy < 7; indy++) {
+    jointTrajectory.points[1].positions[indy] = jointState[indy];
   }
 
-  jointTrajectory.points[1].positions[0] = (!absolute ? jointStates.position[1] : 0) + to;
+  jointTrajectory.points[1].positions[0] = (!absolute ? jointState[1] : 0) + to;
 
   armPositionPublisher.publish(jointTrajectory);
   ROS_INFO("Published new joint trajectory for base.");
 
   ros::Duration(3.0).sleep();
-  while (baseIsMoving()){
-    ros::Duration(0.1).sleep();
-  }
 
   ROS_INFO("Done moving base.");
 }
@@ -346,7 +361,7 @@ int main(int argc, char **argv){
   }
 
   ros::Subscriber orders = n.subscribe("orders", 1, orderHandler);
-  ros::Subscriber jointStateSubsriber = n.subscribe("arm1/joint_states", 1, jointStateListener);
+  ros::Subscriber jointStateubsriber = n.subscribe("arm1/joint_states", 1, jointStateListener);
   ros::Subscriber gripperStateSubscriber = n.subscribe("arm1/gripper/state", 1000, gripperStateListener);
 
   armPositionPublisher = n.advertise<trajectory_msgs::JointTrajectory>("arm1/arm/command", 10);
@@ -435,8 +450,8 @@ int main(int argc, char **argv){
           ROS_INFO("ARM Frame Pose: ");
           printPose(goalPose);
 
-          goalPose.position.x += 0.415;
-          //goalPose.pose.position.y -= 0.378;
+          //goalPose.position.x = (goalPose.position.x) / 2 + 0.115;
+          //goalPose.position.y -= 0.05;
           goalPose.position.z += 0.24;
           goalPose.orientation.w = 0.707;
           goalPose.orientation.x = 0.0;
