@@ -155,8 +155,7 @@ target_link_libraries(compete ${catkin_LIBRARIES})
 ## Specify libraries to link a library or executable target against
 target_link_libraries(compete
   ${catkin_LIBRARIES}
-  #ur10_kin
-  /opt/ros/noetic/lib/libur10_kin.so
+  /ariac_ws/devel/lib/libur10_kin.so
 )
 
 #############

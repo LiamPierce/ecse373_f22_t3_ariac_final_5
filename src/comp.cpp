@@ -34,6 +34,7 @@ ros::ServiceClient materialLocationsService;
 std::map<string, ros::Subscriber> logicCameraSubscribers;
 std::map<string, osrf_gear::LogicalCameraImage> logicalCameraImages;
 std::map<string, double> binPositions = {{"bin1", 0}, {"bin2", 0}, {"bin3", 0}, {"bin4", -0.4}, {"bin5", 0.35}, {"bin6", 1.2}};
+//std::map<string, double> binPositions = {{"bin1", 0}, {"bin2", 0}, {"bin3", 0}, {"bin4", -0.4}, {"bin5", 0.35}, {"bin6", 1.2}};
 
 sensor_msgs::JointState jointStates;
 
@@ -113,6 +114,21 @@ void gripperStateListener(const osrf_gear::VacuumGripperStateConstPtr& msg) {
 	gripperState = *msg;
 }
 
+geometry_msgs::TransformStamped getArmTransformFrom(std::string bin){
+  geometry_msgs::TransformStamped tf;
+  try{
+    tf = tfBuffer.lookupTransform("arm1_base_link", "logical_camera_"+bin+"_frame", ros::Time(0.0), ros::Duration(1.0));
+    ROS_INFO(
+      "Transform to [%s] from [%s]", tf.header.frame_id.c_str(),
+      tf.child_frame_id.c_str()
+    );
+  }catch(tf2::TransformException &ex){
+    ROS_ERROR("Transform error: %s", ex.what());
+  }
+
+  return tf;
+}
+
 bool armIsMoving() {
   bool s = false;
   for (const double v : jointStates.velocity) {
@@ -122,6 +138,10 @@ bool armIsMoving() {
   }
 
   return false;
+}
+
+void printPose(const geometry_msgs::Pose &pose) {
+  ROS_INFO("%f %f %f", pose.position.x, pose.position.y, pose.position.z);
 }
 
 int packets = 0;
@@ -141,13 +161,13 @@ void moveArm(geometry_msgs::Pose &desired){
 
   ur_kinematics::forward((double *)&current_pose, (double *)&T_forward);
 
-  ROS_INFO("%f %f %f", desired.position.x, desired.position.y, desired.position.z);
+  printPose(desired);
 
   T_forward[0][3] = desired.position.x;
   T_forward[1][3] = desired.position.y;
   T_forward[2][3] = desired.position.z;
   T_forward[3][3] = 1.0;
-  // The orientation of the end effector so that the end effector is down.
+
   T_forward[0][0] = 0.0;
   T_forward[0][1] = -1.0;
   T_forward[0][2] = 0.0;
@@ -301,7 +321,6 @@ int main(int argc, char **argv){
     beginComp.response.message.c_str());
   }
 
-
   tf2_ros::TransformListener tfListener(tfBuffer);
 
   materialLocationsService = n.serviceClient<osrf_gear::GetMaterialLocations>("material_locations");
@@ -387,7 +406,6 @@ int main(int argc, char **argv){
           }
 
           osrf_gear::LogicalCameraImage im = logicalCameraImages["logical_camera_"+(binId)];
-
           if (im.models.size() == 0){
             ROS_ERROR("\t\tProduct not found in bin.");
             continue;
@@ -395,29 +413,35 @@ int main(int argc, char **argv){
 
           moveBase(binPositions[binId], true);
 
-          geometry_msgs::TransformStamped tf;
-          try{
-            tf = tfBuffer.lookupTransform("arm1_base_link", "logical_camera_"+binId+"_frame", ros::Time(0.0), ros::Duration(1.0));
-            ROS_INFO(
-              "Transform to [%s] from [%s]", tf.header.frame_id.c_str(),
-              tf.child_frame_id.c_str()
-            );
-          }catch(tf2::TransformException &ex){
-            ROS_ERROR("Transform error: %s", ex.what());
-          }
+          geometry_msgs::Pose partPose, goalPose;
+          geometry_msgs::Pose cameraPose, emptyPose, correctionPose;
 
-          geometry_msgs::PoseStamped partPose, goalPose;
-          partPose.pose = im.models[rand() % 5].pose;
+          geometry_msgs::TransformStamped tf = getArmTransformFrom(binId);
+
+          cameraPose = im.pose;
+
+          partPose = im.models.front().pose;
+          goalPose.position.x = 0;
+          goalPose.position.y = 0;
+          goalPose.position.z = 0;
+
           tf2::doTransform(partPose, goalPose, tf);
+          tf2::doTransform(emptyPose, correctionPose, tf);
 
-          goalPose.pose.position.x += 0.46;
-          goalPose.pose.position.z += 0.24;
-          goalPose.pose.orientation.w = 0.707;
-          goalPose.pose.orientation.x = 0.0;
-          goalPose.pose.orientation.y = 0.707;
-          goalPose.pose.orientation.z = 0.0;
+          ROS_INFO("Part Pose: ");
+          printPose(partPose);
+          ROS_INFO("ARM Frame Pose: ");
+          printPose(goalPose);
 
-          moveArm(goalPose.pose);
+          /*goalPose.pose.position.x += 0.415;
+          goalPose.pose.position.y -= 0.378;*/
+          goalPose.position.z += 0.24;
+          goalPose.orientation.w = 0.707;
+          goalPose.orientation.x = 0.0;
+          goalPose.orientation.y = 0.707;
+          goalPose.orientation.z = 0.0;
+
+          moveArm(goalPose);
 
           ros::Duration(1).sleep();
 
@@ -430,7 +454,7 @@ int main(int argc, char **argv){
 
           moveArm(startPose);
           ros::Duration(1).sleep();
-          moveArm(goalPose.pose);
+          moveArm(goalPose);
 
           ros::Duration(1).sleep();
 
