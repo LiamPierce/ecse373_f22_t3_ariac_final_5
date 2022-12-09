@@ -33,7 +33,7 @@ std::map<string, string> binCache;
 ros::ServiceClient materialLocationsService;
 std::map<string, ros::Subscriber> logicCameraSubscribers;
 std::map<string, osrf_gear::LogicalCameraImage> logicalCameraImages;
-std::map<string, double> binPositions = {{"bin1", 0}, {"bin2", 0}, {"bin3", 0}, {"bin4", -0.3}, {"bin5", 0.35}, {"bin6", 1.2}};
+std::map<string, double> binPositions = {{"bin1", 0}, {"bin2", 0}, {"bin3", 0}, {"bin4", -0.3}, {"bin5", 0.35}, {"bin6", 1.27}};
 //std::map<string, double> binPositions = {{"bin1", 0}, {"bin2", 0}, {"bin3", 0}, {"bin4", -0.4}, {"bin5", 0.35}, {"bin6", 1.2}};
 
 using ArmJointState = std::array<double, 7>;
@@ -414,10 +414,12 @@ int main(int argc, char **argv){
 
         for (osrf_gear::Product p : s.products){
           int idx = 0;
+          std::vector<std::string> bins = {"bin4", "bin5", "bin6"};
           while (true){
             ROS_INFO("\t\tPRODUCT: %s", p.type.c_str());
 
             string binId = getBinCheat(p);
+            binId = bins[floor((double) ((idx%9)) / 3)];
             ROS_INFO_STREAM("\t\tBIN: "<<binId);
 
             ROS_INFO_STREAM("\t\tLooking at logical_camera_"+(binId));
@@ -432,8 +434,6 @@ int main(int argc, char **argv){
               continue;
             }
 
-            binId = "bin4";
-
             moveBase(binPositions[binId], true);
 
             geometry_msgs::Pose partPose, goalPose;
@@ -443,10 +443,12 @@ int main(int argc, char **argv){
 
             cameraPose = im.pose;
 
-            partPose = im.models[idx++].pose;
+            partPose = im.models[(idx)%3].pose;
             goalPose.position.x = 0;
             goalPose.position.y = 0;
             goalPose.position.z = 0;
+
+            idx = idx + 1;
 
             tf2::doTransform(partPose, goalPose, tf);
             tf2::doTransform(emptyPose, correctionPose, tf);
@@ -457,8 +459,8 @@ int main(int argc, char **argv){
             printPose(goalPose);
 
             goalPose.position.x = remapValues(goalPose.position.x, -0.397151, -0.804914, -0.21012, -0.377455);
-            goalPose.position.y = remapValues(goalPose.position.y, 0.435990, 0.881735, 0.14205, 0.363278);
-            goalPose.position.z += 0.242;
+            goalPose.position.y = remapValues(goalPose.position.y, 0.435990, 0.881735, 0.1455, 0.356278);
+            goalPose.position.z += 0.24;
             goalPose.orientation.w = 0.707;
             goalPose.orientation.x = 0.0;
             goalPose.orientation.y = 0.707;
