@@ -155,7 +155,7 @@ target_link_libraries(compete ${catkin_LIBRARIES})
 ## Specify libraries to link a library or executable target against
 target_link_libraries(compete
   ${catkin_LIBRARIES}
-  /ariac_ws/install/lib/libur10_kin.so
+  ur10_kin
 )
 
 #############
