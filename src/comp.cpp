@@ -244,7 +244,7 @@ ArmJointState getKinematicsFromPose(geometry_msgs::Pose &desired, bool isAGVPose
   int sol_idx = 0;
   if (isAGVPose){
     for (int i = 0; i < num_sols; ++i) {
-      if (output_poses[i][3] > M_PI && output_poses[i][1] < M_PI && output_poses[i][2] < M_PI) {
+      if (output_poses[i][3] > M_PI && output_poses[i][1] > M_PI && output_poses[i][2] < M_PI) {
         sol_idx = i;
         break;
       }
@@ -333,14 +333,14 @@ void yawEffector(double rads){
   moveToGoalJointState(goalRotation, ros::Duration(1));
 }
 
-void moveArm(geometry_msgs::Pose &desired, bool isAGVPose = false){
+void moveArm(geometry_msgs::Pose &desired, bool isAGVPose = false, double duration = 3){
 
   printPose(desired);
 
   ArmJointState goalJointState = getKinematicsFromPose(desired, isAGVPose);
-  moveToGoalJointState(goalJointState, ros::Duration(3));
+  moveToGoalJointState(goalJointState, ros::Duration(duration));
 
-  ros::Duration(3.2).sleep();
+  ros::Duration(ros::Duration(duration + 0.2)).sleep();
 }
 
 void moveBase(double to, bool absolute = false){
@@ -468,8 +468,8 @@ int main(int argc, char **argv){
   bool start = true;
   geometry_msgs::Pose startPose;
   startPose.position.x = -0.05;
-  startPose.position.y = 0.2;
-  startPose.position.z = 0.20;
+  startPose.position.y = 0.20;
+  startPose.position.z = 0.12;
 
   int ordersCompleted = 0;
   int count = 0;
@@ -558,9 +558,18 @@ int main(int argc, char **argv){
             ROS_ERROR("GRIPPER FAILED TO ENABLE");
           }
 
-          moveArm(goalPose);
+          //Make sure to grab a part.
+          while (!gripperState.attached){
+            moveArm(goalPose);
+            ros::Duration(0.3).sleep();
 
-          ros::Duration(1).sleep();
+            if (!gripperState.attached){
+              goalPose.position.z += 0.05;
+              moveArm(goalPose, false, 0.3);
+              goalPose.position.z -= 0.05;
+              goalPose.position.y += 0.02; //Move a little... this shouldn't be needed often.
+            }
+          }
 
           int agv = (s.agv_id == "agv2" || s.agv_id == "any" ? 2 : 1);
           //agv = 1;
@@ -577,21 +586,25 @@ int main(int argc, char **argv){
           printPose(p.pose);
           ROS_INFO("ARM Frame Pose: ");
           printPose(goalPose);
+
+          goalPose.position.x = remapValues(goalPose.position.x, -0.25, 0.25, -0.04, 0.13);
           if (agv == 1){
-            //goalPose.position.y = remapValues(goalPose.position.y, 0.519752, 0.854737, 0.2, 0.4);
+
+            goalPose.position.y = remapValues(goalPose.position.y, 0.5, 1.40920, 0.28, 0.52);
             while (ros::ok() && agvStates["agv1"] != "ready_to_deliver"){
               ros::Duration(0.1).sleep();
             }
           }else{
-            //goalPose.position.y = remapValues(goalPose.position.y, -0.819752, -1.13, -0.3, -0.5);
+
+            goalPose.position.y = remapValues(goalPose.position.y, -1.40920, -0.500, -0.52, -0.28);
             while (ros::ok() && agvStates["agv2"] != "ready_to_deliver"){
               ros::Duration(0.1).sleep();
             }
           }
 
-          double yaw = poseToYaw(goalPose);
+          goalPose.position.z = -0.01;
 
-          goalPose.position.z = -0.2;
+          double yaw = poseToYaw(goalPose);
           moveArm(goalPose, true);
 
           ROS_INFO("Rotating to yaw %f", yaw);
