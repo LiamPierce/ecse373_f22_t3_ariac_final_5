@@ -33,7 +33,7 @@ std::map<string, string> binCache;
 ros::ServiceClient materialLocationsService;
 std::map<string, ros::Subscriber> logicCameraSubscribers;
 std::map<string, osrf_gear::LogicalCameraImage> logicalCameraImages;
-std::map<string, double> binPositions = {{"bin1", 0}, {"bin2", 0}, {"bin3", 0}, {"bin4", 0.493427}, {"bin5", 0.35}, {"bin6", 1.2}};
+std::map<string, double> binPositions = {{"bin1", 0}, {"bin2", 0}, {"bin3", 0}, {"bin4", -0.3}, {"bin5", 0.35}, {"bin6", 1.2}};
 //std::map<string, double> binPositions = {{"bin1", 0}, {"bin2", 0}, {"bin3", 0}, {"bin4", -0.4}, {"bin5", 0.35}, {"bin6", 1.2}};
 
 using ArmJointState = std::array<double, 7>;
@@ -52,6 +52,10 @@ double T_forward[4][4], T_destination[4][4];
 
 
 trajectory_msgs::JointTrajectory desired;
+
+double remapValues(double x, double in_min, double in_max, double out_min, double out_max) {
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
 
 string getBin(osrf_gear::Product p){
 
@@ -409,80 +413,83 @@ int main(int argc, char **argv){
         ROS_INFO("\tPRODUCTS:");
 
         for (osrf_gear::Product p : s.products){
-          ROS_INFO("\t\tPRODUCT: %s", p.type.c_str());
+          int idx = 0;
+          while (true){
+            ROS_INFO("\t\tPRODUCT: %s", p.type.c_str());
 
-          string binId = getBinCheat(p);
-          ROS_INFO_STREAM("\t\tBIN: "<<binId);
+            string binId = getBinCheat(p);
+            ROS_INFO_STREAM("\t\tBIN: "<<binId);
 
-          ROS_INFO_STREAM("\t\tLooking at logical_camera_"+(binId));
-          if (logicalCameraImages.find("logical_camera_"+(binId)) == logicalCameraImages.end()){
-            ROS_INFO("NO DATA ON THIS BIN");
-            continue;
+            ROS_INFO_STREAM("\t\tLooking at logical_camera_"+(binId));
+            if (logicalCameraImages.find("logical_camera_"+(binId)) == logicalCameraImages.end()){
+              ROS_INFO("NO DATA ON THIS BIN");
+              continue;
+            }
+
+            osrf_gear::LogicalCameraImage im = logicalCameraImages["logical_camera_"+(binId)];
+            if (im.models.size() == 0){
+              ROS_ERROR("\t\tProduct not found in bin.");
+              continue;
+            }
+
+            binId = "bin4";
+
+            moveBase(binPositions[binId], true);
+
+            geometry_msgs::Pose partPose, goalPose;
+            geometry_msgs::Pose cameraPose, emptyPose, correctionPose;
+
+            geometry_msgs::TransformStamped tf = getArmTransformFrom(binId);
+
+            cameraPose = im.pose;
+
+            partPose = im.models[idx++].pose;
+            goalPose.position.x = 0;
+            goalPose.position.y = 0;
+            goalPose.position.z = 0;
+
+            tf2::doTransform(partPose, goalPose, tf);
+            tf2::doTransform(emptyPose, correctionPose, tf);
+
+            ROS_INFO("Part Pose: ");
+            printPose(partPose);
+            ROS_INFO("ARM Frame Pose: ");
+            printPose(goalPose);
+
+            goalPose.position.x = remapValues(goalPose.position.x, -0.397151, -0.804914, -0.21012, -0.377455);
+            goalPose.position.y = remapValues(goalPose.position.y, 0.435990, 0.881735, 0.14205, 0.363278);
+            goalPose.position.z += 0.242;
+            goalPose.orientation.w = 0.707;
+            goalPose.orientation.x = 0.0;
+            goalPose.orientation.y = 0.707;
+            goalPose.orientation.z = 0.0;
+
+            osrf_gear::VacuumGripperControl request;
+            request.request.enable = true;
+  		      bool success = gripperClient.call(request);
+            if (!success){
+              ROS_ERROR("GRIPPER FAILED TO ENABLE");
+            }
+
+            moveArm(goalPose);
+
+            ros::Duration(1).sleep();
+
+            moveArm(startPose);
+            ros::Duration(1).sleep();
+            moveArm(goalPose);
+
+            ros::Duration(1).sleep();
+
+            request.request.enable = false;
+  		      success = gripperClient.call(request);
+            if (!success){
+              ROS_ERROR("GRIPPER FAILED TO DISABLE");
+            }
+
+            moveArm(startPose);
+            ros::Duration(1).sleep();
           }
-
-          osrf_gear::LogicalCameraImage im = logicalCameraImages["logical_camera_"+(binId)];
-          if (im.models.size() == 0){
-            ROS_ERROR("\t\tProduct not found in bin.");
-            continue;
-          }
-
-          binId = "bin4";
-
-          moveBase(binPositions[binId], true);
-
-          geometry_msgs::Pose partPose, goalPose;
-          geometry_msgs::Pose cameraPose, emptyPose, correctionPose;
-
-          geometry_msgs::TransformStamped tf = getArmTransformFrom(binId);
-
-          cameraPose = im.pose;
-
-          partPose = im.models.front().pose;
-          goalPose.position.x = 0;
-          goalPose.position.y = 0;
-          goalPose.position.z = 0;
-
-          tf2::doTransform(partPose, goalPose, tf);
-          tf2::doTransform(emptyPose, correctionPose, tf);
-
-          ROS_INFO("Part Pose: ");
-          printPose(partPose);
-          ROS_INFO("ARM Frame Pose: ");
-          printPose(goalPose);
-
-          //goalPose.position.x = (goalPose.position.x) / 2 + 0.115;
-          //goalPose.position.y -= 0.05;
-          goalPose.position.z += 0.24;
-          goalPose.orientation.w = 0.707;
-          goalPose.orientation.x = 0.0;
-          goalPose.orientation.y = 0.707;
-          goalPose.orientation.z = 0.0;
-
-          moveArm(goalPose);
-
-          ros::Duration(1).sleep();
-
-          osrf_gear::VacuumGripperControl request;
-          request.request.enable = true;
-		      bool success = gripperClient.call(request);
-          if (!success){
-            ROS_ERROR("GRIPPER FAILED TO ENABLE");
-          }
-
-          moveArm(startPose);
-          ros::Duration(1).sleep();
-          moveArm(goalPose);
-
-          ros::Duration(1).sleep();
-
-          request.request.enable = false;
-		      success = gripperClient.call(request);
-          if (!success){
-            ROS_ERROR("GRIPPER FAILED TO DISABLE");
-          }
-
-          moveArm(startPose);
-          ros::Duration(1).sleep();
         }
       }
       ROS_INFO("Moving arm to home.");
