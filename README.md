@@ -317,4 +317,13 @@ if (!success){
 }
 ```
 
+## Key Package Takeaways
+
+There are a few key components that allowed the package to succeed.
+
+1. The use of key poses to allow the robot to skillfully avoid the logical cameras and place itself in a beneficial position based on the current situation.
+2. The use of the remapValues function allowed the transforms to be useful. Since the coordinate transforms were completely incorrect in my environment, this package required the use of complicated coordinate remapping to succeed at all. Without this component the project would not be complete.
+3. Yawwing the end effector to increase the ARIAC pose score.
+4. A well seperated data source and data controller and well defined helper methods. Since the order listening, joint listening, etc was well seperated from the main loop, it was very easy to update the per-product routine.
+
 
