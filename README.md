@@ -95,14 +95,6 @@ LIBRARY_PATH="$LD_LIBRARY_PATH"
 
 ## Initialization
 The code initializes key componets, including the camera, order, and transform listeners, the different services required for the gripper, starting the competition, telling the AGVs a shipment is ready, etc. 
-## Main Loop
-The main loop is designed to handle all of the key components of the ariac. 
-
-## Listeners
-Orders that are received are queued into a vector to be read later by the main loop.
-AGV states are stored into a map to be read in the main loop.
-The gripper state is listened to and stored to be read in the main loop.
-The joint states are read and reordered to match the order of the "order" vector.
 
 ## Specific Functions, Helpers, & Types
 ### ArmJointState
@@ -158,5 +150,171 @@ This function takes in a desired pose and moves the arm to that pose. It does th
 ### void moveBase(double to, bool absolute = false)
 
 This function takes in a position for the linear actuator, copies the current joint state, changes the linear actuator position to the given value, and republishes the trajectory.
+
+## Listeners
+1. Orders that are received are queued into a vector to be read later by the main loop.
+2. AGV states are stored into a map to be read in the main loop.
+3. The gripper state is listened to and stored to be read in the main loop.
+4. The joint states are read and reordered to match the order of the "order" vector.
+5. Logical camera images are all stored directly to a map from binId to logical camera image.
+
+## Main Loop
+The main loop is designed to handle all of the key components of the ariac. 
+
+It ensures that all of the logical camera images have been loaded before proceeding. It returns if 2 orders have been filled already, though the ARIAC does this itself. It copies and clears the order queue. 
+
+### Robot Poses In Use
+There are 3 main poses for the robot used by this package while it moves through the ARIAC. The startPose, leftPose, and rightPose.
+
+#### Start Pose
+While moving back to a bin or retreating from an AGV, the robot defaults to the startPose. This pose is a great starting point for reaching into the bins because it avoids the logical cameras. It is hovered slightly above the bins but never runs into them.
+
+![start pose](https://github.com/LiamPierce/ecse373_f22_t3_ariac_final_5/blob/master/Screenshot%202022-12-09%20at%209.34.53%20PM.png)
+
+### Left Pose
+While moving to the left AGV, the leftPose is used because it is facing the left AGV. This makes depositing the part easier. It also makes planning the yaw change for the end effector easier.
+
+![left pose](https://github.com/LiamPierce/ecse373_f22_t3_ariac_final_5/blob/master/Screenshot%202022-12-09%20at%209.37.17%20PM.png)
+
+### Right Pose
+Similarly, while moving to the right AGV, the rightPose is used because it is facing the right AGV. This makes depositing the part easier and makes planning the yaw change easier.
+
+![right pose](https://github.com/LiamPierce/ecse373_f22_t3_ariac_final_5/blob/master/Screenshot%202022-12-09%20at%209.35.10%20PM.png)
+
+### Per Product Routine
+For every order in the copied queue, the main loop will go through every shipment. For each shipment, the loop goes to each product.
+
+For each product, the loop determines which bin it is in, finds the logical camera image from the logical camera image map, and finds the best product to pick from the bin and its pose relative to the camera.
+
+If there are no products in the bin, the loop will skip the product.
+
+The loop then moves to the linear actuator position stored in the binPositions map according to the binId key. It does this movement using  ```moveBase(binPositions[binId], true);```. The position stored is an absolute linear actuator position.
+
+The loop sleeps for half a second to make sure there isn't oscillation in the base position. 
+
+The loop then converts the part pose to the arm's frame.
+```
+tf2::Transform tf = getArmTransformFrom("logical_camera_"+binId+"_frame");
+geometry_msgs::Pose goalPose = applyTransform(tf, im.models.front().pose);
+```
+
+Since this conversion seems to be broken in my environment, the main loop then does a transform of its own using the remapValues helper function described above.
+
+```
+goalPose.position.x = remapValues(goalPose.position.x, -0.397151, -0.804914, -0.21012, -0.377455);
+goalPose.position.y = remapValues(goalPose.position.y, 0.435990, 0.881735, 0.144, 0.358278);
+goalPose.position.z += 0.239;
+goalPose.orientation.w = 0.707;
+goalPose.orientation.x = 0.0;
+goalPose.orientation.y = 0.707;
+goalPose.orientation.z = 0.0;
+```
+
+The vacuum gripper is turned on now before reaching the part.
+
+```
+osrf_gear::VacuumGripperControl request;
+request.request.enable = true;
+bool success = gripperClient.call(request);
+if (!success){
+  ROS_ERROR("GRIPPER FAILED TO ENABLE");
+}
+```
+
+The arm is then instructed to move to ```goalPose``` using the ```moveArm(...)``` function.
+Though it isn't common, the gripper may fail to pick up the part. There is a failsafe built into the design of this call.
+
+```
+while (!gripperState.attached){
+  moveArm(goalPose);
+  ros::Duration(0.3).sleep();
+
+  if (!gripperState.attached){
+    goalPose.position.z += 0.05;
+    moveArm(goalPose, false, 0.3);
+    goalPose.position.z -= 0.05;
+    goalPose.position.y += 0.02; //Move a little... this shouldn't be needed often.
+  }
+}
+```
+If the gripper is somehow already holding a part, it will not attempt to pick up the part at all. If the gripper fails to pick up the part, it will back off slightly, readjust the Y coordinate slightly, and try again.
+
+The arm moves to the startPose to avoid the logical camera while moving to the left or right pose depending on which AGV this part is destined for. The arm then moves to that left or right pose then to the correct AGV.
+
+The program sleeps for one second to ensure the robot isn't oscillating.
+
+The desired coordinates for the part on the AGV tray are determined from the part goal pose in the shipment specification. That agv-frame coordinate is then converted using a tf transform.
+
+```
+tf = getArmTransformFrom("kit_tray_" + std::to_string(agv));
+goalPose= applyTransform(tf, p.pose);
+```
+
+The x and y positions are then remapped again depending on which AGV is being used. This is again because of the transformation issue.
+
+```
+goalPose.position.x = remapValues(goalPose.position.x, -0.17, 0.18, -0.04, 0.13);
+if (agv == 1){
+  goalPose.position.y = remapValues(goalPose.position.y, 0.75, 1.10920, 0.28, 0.52);
+  while (ros::ok() && agvStates["agv1"] != "ready_to_deliver"){
+    ros::Duration(0.1).sleep();
+  }
+}else{
+
+  goalPose.position.y = remapValues(goalPose.position.y, -1.10920, -0.75, -0.52, -0.28);
+  while (ros::ok() && agvStates["agv2"] != "ready_to_deliver"){
+    ros::Duration(0.1).sleep();
+  }
+}
+goalPose.position.z = -0.01;
+```
+
+The end effector is rotated to the goal yaw determined by the poseToYaw helper explained above.
+```
+double yaw = poseToYaw(goalPose);
+yawEffector(yaw);
+```
+The arm is then moved to place the part on the AGV.
+```
+moveArm(goalPose, true);
+```
+
+And the vacuum gripper is disabled.
+
+```
+request.request.enable = false;
+success = gripperClient.call(request);
+if (!success){
+  ROS_ERROR("GRIPPER FAILED TO DISABLE");
+}
+```
+
+The arm is then moved back to the startPose.
+
+This same task is repeated for every product.
+
+### Finishing a shipment
+
+Once every product in a shipment has been fulfilled, the shipment's AGV is called.
+
+```
+osrf_gear::AGVControl submit;
+submit.request.shipment_type = s.shipment_type;
+
+bool success = false;
+if (s.agv_id == "agv1"){
+  success = agv1Client.call(submit);
+}else{
+  success = agv2Client.call(submit);
+}
+
+if (!success){
+  ROS_ERROR("Failed to called AGV Client!");
+}else if (!submit.response.success){
+  ROS_ERROR("Shipment unsuccessful with message %s", submit.response.message.c_str());
+}else{
+  ROS_INFO("Successfully submitted shipment.");
+}
+```
 
 
