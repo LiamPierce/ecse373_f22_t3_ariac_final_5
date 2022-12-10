@@ -1,6 +1,8 @@
 # Example Run
 [This link](https://youtu.be/5s21_tOiuP8) contains a video of an early run of this package. Improvements have been made since, specifically for product placement on the AGV and arm planning.
 
+[This link](https://youtu.be/BT3zHipF27Q) contains a video of another early run that contains more of the poses described in this file.
+
 # Coordinate Issues
 
 This package was designed in an environment that seems to be failing every coordinate transform. All through the main c++ file there are functions that attempt to fix this issue.
