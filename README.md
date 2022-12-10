@@ -10,6 +10,22 @@ The code loops to check for new orders in the queue. If there's a new order, and
 
 The code also contains a method for finding (and caching) the correct bin location using just the logical camera data.
 
+# Example Run
+
+[This link](https://youtu.be/5s21_tOiuP8) contains a video of an early run of this package. Improvements have been made since, specifically for product placement on the AGV and arm planning.
+
+# Coordinate Issues
+
+This package was designed in an environment that seems to be failing every coordinate transform. All through the main c++ file there are functions that attempt to fix this issue.
+
+The main method of fixing the problem is a coordinate remap for the values that are off.
+`
+double remapValues(double x, double in_min, double in_max, double out_min, double out_max) {
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+`
+These values were determined by looking at the tf transform output and the robot destination coordinate at the corners of the bin and agv stages.
+
 # Running this package:
 
 ## Launch the competition environment:
@@ -29,8 +45,6 @@ roslaunch cwru_ecse_373_submission competition.launch
 If building gives you an error like the following:
 
 ```
-
-
 [ 50%] Linking CXX executable /ariac_ws/devel/lib/cwru_ecse_373_submission/compete
 /usr/bin/ld: cannot find -lur10_kin
 collect2: error: ld returned 1 exit status
