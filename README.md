@@ -326,4 +326,6 @@ There are a few key components that allowed the package to succeed.
 3. Yawwing the end effector to increase the ARIAC pose score.
 4. A well seperated data source and data controller and well defined helper methods. Since the order listening, joint listening, etc was well seperated from the main loop, it was very easy to update the per-product routine.
 
+# General Block Diagram
 
+![block diagram](https://github.com/LiamPierce/ecse373_f22_t3_ariac_final_5/blob/master/Screenshot%202022-12-09%20at%2010.21.28%20PM.png)
