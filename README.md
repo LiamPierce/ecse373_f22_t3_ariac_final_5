@@ -10,7 +10,6 @@ The code loops to check for new orders in the queue. If there's a new order, and
 
 The code also contains a method for finding (and caching) the correct bin location using just the logical camera data.
 
-<<<<<<< HEAD
 # Example Run
 
 [This link](https://youtu.be/5s21_tOiuP8) contains a video of an early run of this package. Improvements have been made since, specifically for product placement on the AGV and arm planning.
@@ -20,19 +19,13 @@ The code also contains a method for finding (and caching) the correct bin locati
 This package was designed in an environment that seems to be failing every coordinate transform. All through the main c++ file there are functions that attempt to fix this issue.
 
 The main method of fixing the problem is a coordinate remap for the values that are off.
-`
+```
 double remapValues(double x, double in_min, double in_max, double out_min, double out_max) {
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
-`
+```
 These values were determined by looking at the tf transform output and the robot destination coordinate at the corners of the bin and agv stages.
 
-=======
-# Example RUN
-
-[This link](https://youtu.be/5s21_tOiuP8) contains a video of an early run of this package. Improvements have been made since, specifically for product placement on the AGV and arm planning.
-
->>>>>>> ebbe3f891f7a408b458f7a0b846bab34ab865950
 # Running this package:
 
 ## Launch the competition environment:
