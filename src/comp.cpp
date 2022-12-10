@@ -241,20 +241,14 @@ ArmJointState getKinematicsFromPose(geometry_msgs::Pose &desired, bool isAGVPose
     //ros::shutdown();
   }
 
+
+  double minAngle = INT_MAX;
+
   int sol_idx = 0;
-  if (isAGVPose){
-    for (int i = 0; i < num_sols; ++i) {
-      if (output_poses[i][3] > M_PI && output_poses[i][1] > M_PI && output_poses[i][2] < M_PI) {
-        sol_idx = i;
-        break;
-      }
-    }
-  }else{
-    for (int i = 0; i < num_sols; ++i) {
-      if (output_poses[i][3] > M_PI && output_poses[i][1] > M_PI && output_poses[i][2] < M_PI) {
-        sol_idx = i;
-        break;
-      }
+  for (int i = 0; i < num_sols; ++i) {
+    if (output_poses[i][3] > M_PI && output_poses[i][1] > M_PI && output_poses[i][2] < M_PI) {
+      sol_idx = i;
+      break;
     }
   }
 
@@ -467,9 +461,19 @@ int main(int argc, char **argv){
 
   bool start = true;
   geometry_msgs::Pose startPose;
-  startPose.position.x = -0.05;
-  startPose.position.y = 0.20;
-  startPose.position.z = 0.12;
+  startPose.position.x = -0.2;
+  startPose.position.y = -0.02;
+  startPose.position.z = 0.10;
+
+  geometry_msgs::Pose leftPose;
+  leftPose.position.x = -0.2;
+  leftPose.position.y = 0.3;
+  leftPose.position.z = 0.10;
+
+  geometry_msgs::Pose rightPose;
+  rightPose.position.x = 0.0;
+  rightPose.position.y = -0.3;
+  rightPose.position.z = 0.10;
 
   int ordersCompleted = 0;
   int count = 0;
@@ -575,7 +579,14 @@ int main(int argc, char **argv){
           //agv = 1;
 
           moveArm(startPose);
-          moveBase(agv == 1 ? 2.2 : -2.2, true);
+          if (agv == 1){
+            moveArm(leftPose, 1.5);
+          }else{
+            moveArm(rightPose, 1.5);
+            yawEffector(M_PI / 2);
+          }
+
+          moveBase(agv == 1 ? 2.25 : -2.25, true);
 
           ros::Duration(1).sleep();
 
@@ -587,16 +598,15 @@ int main(int argc, char **argv){
           ROS_INFO("ARM Frame Pose: ");
           printPose(goalPose);
 
-          goalPose.position.x = remapValues(goalPose.position.x, -0.25, 0.25, -0.04, 0.13);
+          goalPose.position.x = remapValues(goalPose.position.x, -0.17, 0.18, -0.04, 0.13);
           if (agv == 1){
-
-            goalPose.position.y = remapValues(goalPose.position.y, 0.5, 1.40920, 0.28, 0.52);
+            goalPose.position.y = remapValues(goalPose.position.y, 0.75, 1.10920, 0.28, 0.52);
             while (ros::ok() && agvStates["agv1"] != "ready_to_deliver"){
               ros::Duration(0.1).sleep();
             }
           }else{
 
-            goalPose.position.y = remapValues(goalPose.position.y, -1.40920, -0.500, -0.52, -0.28);
+            goalPose.position.y = remapValues(goalPose.position.y, -1.10920, -0.75, -0.52, -0.28);
             while (ros::ok() && agvStates["agv2"] != "ready_to_deliver"){
               ros::Duration(0.1).sleep();
             }
@@ -605,10 +615,11 @@ int main(int argc, char **argv){
           goalPose.position.z = -0.01;
 
           double yaw = poseToYaw(goalPose);
+          yawEffector(yaw);
           moveArm(goalPose, true);
 
           ROS_INFO("Rotating to yaw %f", yaw);
-          yawEffector(yaw);
+
 
           ros::Duration(1).sleep();
 
