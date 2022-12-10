@@ -10,6 +10,7 @@ The code loops to check for new orders in the queue. If there's a new order, and
 
 The code also contains a method for finding (and caching) the correct bin location using just the logical camera data.
 
+<<<<<<< HEAD
 # Example Run
 
 [This link](https://youtu.be/5s21_tOiuP8) contains a video of an early run of this package. Improvements have been made since, specifically for product placement on the AGV and arm planning.
@@ -26,6 +27,12 @@ double remapValues(double x, double in_min, double in_max, double out_min, doubl
 `
 These values were determined by looking at the tf transform output and the robot destination coordinate at the corners of the bin and agv stages.
 
+=======
+# Example RUN
+
+[This link](https://youtu.be/5s21_tOiuP8) contains a video of an early run of this package. Improvements have been made since, specifically for product placement on the AGV and arm planning.
+
+>>>>>>> ebbe3f891f7a408b458f7a0b846bab34ab865950
 # Running this package:
 
 ## Launch the competition environment:
