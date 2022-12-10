@@ -10,6 +10,10 @@ The code loops to check for new orders in the queue. If there's a new order, and
 
 The code also contains a method for finding (and caching) the correct bin location using just the logical camera data.
 
+# Example RUN
+
+[This link](https://youtu.be/5s21_tOiuP8) contains a video of an early run of this package. Improvements have been made since, specifically for product placement on the AGV and arm planning.
+
 # Running this package:
 
 ## Launch the competition environment:
@@ -29,8 +33,6 @@ roslaunch cwru_ecse_373_submission competition.launch
 If building gives you an error like the following:
 
 ```
-
-
 [ 50%] Linking CXX executable /ariac_ws/devel/lib/cwru_ecse_373_submission/compete
 /usr/bin/ld: cannot find -lur10_kin
 collect2: error: ld returned 1 exit status
