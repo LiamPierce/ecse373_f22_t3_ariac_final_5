@@ -339,50 +339,12 @@ void moveArm(geometry_msgs::Pose &desired, bool isAGVPose = false, double durati
 
 void moveBase(double to, bool absolute = false){
 
-  trajectory_msgs::JointTrajectory jointTrajectory;
+  ArmJointState goalLinear = jointState;
+  goalLinear[0] = to;
 
-  jointTrajectory.header.seq = packets++;
-  jointTrajectory.header.stamp = ros::Time::now();
-  jointTrajectory.header.frame_id = "/world";
+  moveToGoalJointState(goalLinear, ros::Duration(1.6));
 
-  jointTrajectory.joint_names = order;
-
-  jointTrajectory.points.resize(2);
-  jointTrajectory.points[0].positions.resize(jointTrajectory.joint_names.size());
-  jointTrajectory.points[1].positions.resize(jointTrajectory.joint_names.size());
-
-  jointTrajectory.points[0].time_from_start = ros::Duration(0.0);
-  jointTrajectory.points[1].time_from_start = ros::Duration(1.6);
-
-  for (int indy = 0; indy < 7; indy++) {
-    jointTrajectory.points[1].positions[indy] = jointState[indy];
-  }
-
-  jointTrajectory.points[1].positions[0] = (!absolute ? jointState[1] : 0) + to;
-
-  armPositionPublisher.publish(jointTrajectory);
-
-  /*control_msgs::FollowJointTrajectoryAction jointTrajectoryPayload;
-
-  jointTrajectoryPayload.action_goal.goal.trajectory = jointTrajectory;
-  jointTrajectoryPayload.action_goal.header.seq = actionServerPackets++;
-  jointTrajectoryPayload.action_goal.header.stamp = ros::Time::now();
-  jointTrajectoryPayload.action_goal.header.frame_id = "/world";
-
-  jointTrajectoryPayload.action_goal.goal_id.stamp = ros::Time::now();
-  jointTrajectoryPayload.action_goal.goal_id.id = std::to_string(actionServerPackets - 1);
-
-  trajectoryActionServer->sendGoal(jointTrajectoryPayload.action_goal.goal);
-  trajectoryActionServer->waitForServer();
-  bool succeeded = trajectoryActionServer->waitForResult(ros::Duration(20.0));
-
-  if (succeeded){
-    actionlib::SimpleClientGoalState state = trajectoryActionServer->getState();
-    ROS_INFO("Trajectory finished with state %s with text: %s", state.toString().c_str(), state.getText().c_str());
-  }else{
-    ROS_ERROR("TRAJECTORY TIMEOUT!");
-  }*/
-  ros::Duration(4.0).sleep();
+  ros::Duration(3.0).sleep();
 }
 
 int main(int argc, char **argv){
